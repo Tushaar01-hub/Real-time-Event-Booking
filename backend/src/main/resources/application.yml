@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: event-booking
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:eventbooking}
+    username: ${DB_USERNAME:eventbooking}
+    password: ${DB_PASSWORD}          # no default on purpose: secrets come from the environment
+
+  jpa:
+    open-in-view: false               # no lazy loading in the web layer; services return DTOs
+    hibernate:
+      ddl-auto: validate              # Flyway owns the schema, Hibernate only checks it
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8080
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  booking:
+    hold-ttl: 5m
+    max-seats-per-booking: 6
+    cancellation-cutoff: 24h

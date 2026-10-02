@@ -1,0 +1,14 @@
+# Build output
+target/
+node_modules/
+dist/
+
+# Secrets and local config
+.env
+*.pem
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
