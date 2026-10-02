@@ -17,7 +17,11 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.context.SecurityContextHolder;
 /**
  * Translates exceptions into {@link ErrorResponse}. Internal details (SQL, stack traces)
  * are logged, never returned to the client.
@@ -103,5 +107,21 @@ public class GlobalExceptionHandler {
                                                 HttpServletRequest req, List<FieldViolation> violations) {
         return ResponseEntity.status(status)
                 .body(ErrorResponse.of(status, code, message, req.getRequestURI(), violations));
+    }
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(HttpServletRequest req) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth instanceof AnonymousAuthenticationToken) {
+            return build(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED",
+                    "Authentication is required to access this resource", req, List.of());
+        }
+        return build(HttpStatus.FORBIDDEN, "ACCESS_DENIED",
+                "You do not have permission to perform this action", req, List.of());
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleAuthentication(HttpServletRequest req) {
+        return build(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED",
+                "Authentication is required to access this resource", req, List.of());
     }
 }

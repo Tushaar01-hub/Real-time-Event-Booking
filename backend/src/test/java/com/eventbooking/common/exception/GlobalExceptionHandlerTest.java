@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -22,7 +23,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Web-slice test: needs no database, Redis or Docker. */
-@WebMvcTest
+@WebMvcTest(controllers = GlobalExceptionHandlerTest.ErrorTestController.class)
+@AutoConfigureMockMvc(addFilters = false)
 @Import({GlobalExceptionHandler.class, GlobalExceptionHandlerTest.ErrorTestController.class})
 class GlobalExceptionHandlerTest {
 

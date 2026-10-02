@@ -42,3 +42,9 @@ app:
     hold-ttl: 5m
     max-seats-per-booking: 6
     cancellation-cutoff: 24h
+  jwt:
+    secret: ${JWT_SECRET}      # required, min 32 chars; the app refuses to start without it
+    expiration: 60m
+  admin:                       # optional: bootstraps the first ADMIN
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
