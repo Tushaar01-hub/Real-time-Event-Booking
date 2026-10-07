@@ -13,31 +13,49 @@ import com.eventbooking.catalog.seat.Seat;
 import com.eventbooking.catalog.seat.SeatRepository;
 import com.eventbooking.catalog.show.Show;
 import com.eventbooking.catalog.show.ShowRepository;
+import com.eventbooking.common.exception.BookingExpiredException;
+import com.eventbooking.common.exception.PaymentFailedException;
 import com.eventbooking.common.exception.SeatAlreadyHeldException;
+import com.eventbooking.payment.entity.Payment;
+import com.eventbooking.payment.repository.PaymentRepository;
+import com.eventbooking.payment.service.PaymentService;
 import com.eventbooking.support.AbstractIntegrationTest;
 import com.eventbooking.user.entity.User;
 import com.eventbooking.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
+import com.eventbooking.booking.entity.BookingSeat;
+import com.eventbooking.payment.repository.PaymentRepository;
+import com.eventbooking.payment.service.PaymentService;
 /**
  * Integration tests for BookingService holdSeats flow.
  * Tests the full flow: validation → Redis locks → DB persistence → compensation.
  */
 @Transactional
 class BookingServiceTest extends AbstractIntegrationTest {
+//    @Mock
+//    private SeatLockService seatLockService;
+@Autowired
+private PaymentService paymentService;
+
+@Autowired
+private PaymentRepository paymentRepository;
 
     @Autowired
     private BookingService bookingService;
@@ -322,5 +340,103 @@ class BookingServiceTest extends AbstractIntegrationTest {
         if (keys != null && !keys.isEmpty()) {
             redisTemplate.delete(keys);
         }
+    }
+
+    // ------------------------------------------------------------------ confirm flow
+
+    @Test
+    void confirmBooking_Success_ConfirmsBookingAndMarksSeatsBooked() {
+        // Force deterministic payment success
+        paymentService.setSuccessRate(1.0);
+
+        HoldRequest request = new HoldRequest(testShow.getId(), List.of(seat1.getId(), seat2.getId()));
+        HoldResponse holdResponse = bookingService.holdSeats(request, testUser.getId());
+
+        // When
+        bookingService.confirmBooking(holdResponse.getBookingId(), testUser.getId());
+
+        // Then
+        Booking booking = bookingRepository.findById(holdResponse.getBookingId()).orElseThrow();
+        assertThat(booking.getStatus()).isEqualTo("CONFIRMED");
+        assertThat(booking.getBookingSeats()).allMatch(bs -> bs.getActive());
+
+        // Seats are now permanently BOOKED
+        assertThat(seatRepository.findById(seat1.getId()).get().getStatus()).isEqualTo("BOOKED");
+        assertThat(seatRepository.findById(seat2.getId()).get().getStatus()).isEqualTo("BOOKED");
+
+        // Payment record exists and is SUCCESS
+        Optional<Payment> payment = paymentRepository.findByBookingId(holdResponse.getBookingId());
+        assertThat(payment).isPresent();
+        assertThat(payment.get().getStatus()).isEqualTo("SUCCESS");
+
+        // Redis locks are released
+        assertThat(seatLockService.isLocked(testShow.getId(), seat1.getId())).isFalse();
+        assertThat(seatLockService.isLocked(testShow.getId(), seat2.getId())).isFalse();
+    }
+
+    @Test
+    void confirmBooking_Failure_PaymentDeclined() {
+        // Force deterministic payment failure
+        paymentService.setSuccessRate(0.0);
+
+        HoldRequest request = new HoldRequest(testShow.getId(), List.of(seat1.getId()));
+        HoldResponse holdResponse = bookingService.holdSeats(request, testUser.getId());
+
+        // When/Then
+        assertThatThrownBy(() -> bookingService.confirmBooking(holdResponse.getBookingId(), testUser.getId()))
+                .isInstanceOf(PaymentFailedException.class);
+
+        // Booking should still be PENDING (transaction rolled back)
+        Booking booking = bookingRepository.findById(holdResponse.getBookingId()).orElseThrow();
+        assertThat(booking.getStatus()).isEqualTo("CANCELLED");
+
+        // Locks should be released
+        assertThat(seatLockService.isLocked(testShow.getId(), seat1.getId())).isFalse();
+    }
+
+    @Test
+    void confirmBooking_Failure_WhenNotOwner() {
+        HoldRequest request = new HoldRequest(testShow.getId(), List.of(seat1.getId()));
+        HoldResponse holdResponse = bookingService.holdSeats(request, testUser.getId());
+
+        User anotherUser = new User("another@example.com", passwordEncoder.encode("password"),
+                                   "Another User", com.eventbooking.common.security.Role.USER);
+        anotherUser = userRepository.save(anotherUser);
+
+        final Long anotherUserId = anotherUser.getId();
+        assertThatThrownBy(() -> bookingService.confirmBooking(holdResponse.getBookingId(), anotherUserId))
+                .isInstanceOf(com.eventbooking.common.exception.UnauthorizedActionException.class);
+    }
+
+    @Test
+    void confirmBooking_Failure_WhenAlreadyConfirmed() {
+        paymentService.setSuccessRate(1.0);
+
+        HoldRequest request = new HoldRequest(testShow.getId(), List.of(seat1.getId()));
+        HoldResponse holdResponse = bookingService.holdSeats(request, testUser.getId());
+        bookingService.confirmBooking(holdResponse.getBookingId(), testUser.getId());
+
+        // Second confirm should fail
+        assertThatThrownBy(() -> bookingService.confirmBooking(holdResponse.getBookingId(), testUser.getId()))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void confirmBooking_Failure_WhenExpired() {
+        // Create an expired booking manually
+        Booking expiredBooking = new Booking(testUser, testShow, new BigDecimal("100.00"),
+                Instant.now().minus(Duration.ofMinutes(1)));
+        expiredBooking = bookingRepository.save(expiredBooking);
+        expiredBooking.addBookingSeat(
+                new BookingSeat(expiredBooking, seat1, new BigDecimal("100.00"))
+        );
+        bookingRepository.save(expiredBooking);
+
+        final UUID expiredBookingId = expiredBooking.getId();
+
+        assertThatThrownBy(() ->
+                bookingService.confirmBooking(expiredBookingId, testUser.getId()))
+                .isInstanceOf(BookingExpiredException.class);
+
     }
 }

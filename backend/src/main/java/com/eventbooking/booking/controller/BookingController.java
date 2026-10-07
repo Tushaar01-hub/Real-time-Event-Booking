@@ -62,4 +62,18 @@ public class BookingController {
         bookingService.cancelBooking(java.util.UUID.fromString(bookingId), user.getId());
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * Confirm a booking after successful payment.
+     * POST /api/bookings/{id}/confirm
+     * Requires authentication and ownership.
+     */
+    @PostMapping("/{id}/confirm")
+    public ResponseEntity<Void> confirmBooking(
+            @PathVariable("id") String bookingId,
+            @AuthenticationPrincipal User user) {
+
+        bookingService.confirmBooking(java.util.UUID.fromString(bookingId), user.getId());
+        return ResponseEntity.noContent().build();
+    }
 }

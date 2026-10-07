@@ -11,17 +11,24 @@ import com.eventbooking.catalog.seat.Seat;
 import com.eventbooking.catalog.seat.SeatRepository;
 import com.eventbooking.catalog.show.Show;
 import com.eventbooking.catalog.show.ShowRepository;
+import com.eventbooking.common.exception.BookingExpiredException;
+import com.eventbooking.common.exception.PaymentFailedException;
 import com.eventbooking.common.exception.ResourceNotFoundException;
 import com.eventbooking.common.exception.SeatAlreadyHeldException;
 import com.eventbooking.common.exception.UnauthorizedActionException;
+import com.eventbooking.payment.entity.Payment;
+import com.eventbooking.payment.repository.PaymentRepository;
+import com.eventbooking.payment.service.PaymentService;
 import com.eventbooking.user.entity.User;
 import com.eventbooking.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -42,19 +49,25 @@ public class BookingService {
     private final ShowRepository showRepository;
     private final UserRepository userRepository;
     private final SeatLockService seatLockService;
+    private final PaymentRepository paymentRepository;
+    private final PaymentService paymentService;
 
     public BookingService(BookingRepository bookingRepository,
                          BookingSeatRepository bookingSeatRepository,
                          SeatRepository seatRepository,
                          ShowRepository showRepository,
                          UserRepository userRepository,
-                         SeatLockService seatLockService) {
+                         SeatLockService seatLockService,
+                         PaymentRepository paymentRepository,
+                         PaymentService paymentService) {
         this.bookingRepository = bookingRepository;
         this.bookingSeatRepository = bookingSeatRepository;
         this.seatRepository = seatRepository;
         this.showRepository = showRepository;
         this.userRepository = userRepository;
         this.seatLockService = seatLockService;
+        this.paymentRepository = paymentRepository;
+        this.paymentService = paymentService;
     }
 
     /**
@@ -182,6 +195,99 @@ public class BookingService {
         if (booking.isPending() || "CANCELLED".equals(booking.getStatus())) {
             int released = seatLockService.releaseLocks(booking.getShow().getId(), seatIds, bookingId);
             log.info("Cancelled booking {} and released {} locks", bookingId, released);
+        }
+    }
+
+    /**
+     * Confirm a booking after successful payment.
+     * Flow: validate → payment → confirm booking → mark seats BOOKED → release Redis locks.
+     */
+    @Transactional
+    public void confirmBooking(UUID bookingId, Long userId) {
+        Booking booking = getBookingById(bookingId);
+
+        // Verify ownership
+        if (!booking.getUser().getId().equals(userId)) {
+            throw new UnauthorizedActionException("You can only confirm your own bookings");
+        }
+
+        // Must be PENDING
+        if (!booking.isPending()) {
+            throw new IllegalStateException("Booking is not in PENDING state: " + booking.getStatus());
+        }
+
+        // Must not be expired
+        if (booking.isExpired()) {
+            throw new BookingExpiredException(bookingId);
+        }
+
+        // Process payment
+        String idempotencyKey = bookingId.toString();
+        Payment payment = new Payment(bookingId, booking.getTotalAmount(), idempotencyKey);
+        paymentRepository.save(payment);
+
+        com.eventbooking.payment.dto.PaymentResult result = paymentService.processPayment(bookingId, idempotencyKey);
+
+        if (!result.success()) {
+            payment.fail(result.failureReason());
+            paymentRepository.save(payment);
+            booking.cancel();
+            bookingRepository.save(booking);
+
+            // Release Redis locks
+            List<Long> seatIds = booking.getBookingSeats().stream()
+                    .map(bs -> bs.getSeat().getId())
+                    .toList();
+            seatLockService.releaseLocks(booking.getShow().getId(), seatIds, bookingId);
+            throw new PaymentFailedException(result.failureReason());
+        }
+
+        // Payment succeeded — confirm the booking
+        payment.succeed();
+        paymentRepository.save(payment);
+
+        booking.confirm();
+        for (BookingSeat bs : booking.getBookingSeats()) {
+            bs.activate();
+            bs.getSeat().setStatus("BOOKED");
+        }
+        bookingRepository.save(booking);
+
+        // Release Redis locks — seats are now permanently booked
+        List<Long> seatIds = booking.getBookingSeats().stream()
+                .map(bs -> bs.getSeat().getId())
+                .toList();
+        seatLockService.releaseLocks(booking.getShow().getId(), seatIds, bookingId);
+    }
+
+    /**
+     * Expire all PENDING bookings that have passed their expiry time.
+     * Called by @Scheduled to clean up stale holds.
+     */
+    @Transactional
+    @Scheduled(fixedDelayString = "${app.booking.expiry-sweeper-interval:60000}") // every minute by default
+    public void expirePendingBookings() {
+        Instant now = Instant.now();
+        List<Booking> expired = bookingRepository.findExpiredPendingBookings(now);
+
+        for (Booking booking : expired) {
+            try {
+                booking.expire(); // sets status to EXPIRED
+                bookingRepository.save(booking);
+
+                // Release Redis locks
+                List<Long> seatIds = booking.getBookingSeats().stream()
+                        .map(bs -> bs.getSeat().getId())
+                        .toList();
+                int released = seatLockService.releaseLocks(booking.getShow().getId(), seatIds, booking.getId());
+                log.info("Expired booking {} and released {} locks", booking.getId(), released);
+            } catch (Exception e) {
+                log.error("Failed to expire booking {}: {}", booking.getId(), e.getMessage(), e);
+            }
+        }
+
+        if (!expired.isEmpty()) {
+            log.info("Expired {} pending bookings", expired.size());
         }
     }
 }
