@@ -1,8 +1,11 @@
 package com.eventbooking.booking.service;
 
+import com.eventbooking.booking.dto.BookingDetailDto;
+import com.eventbooking.booking.dto.BookingSummaryDto;
 import com.eventbooking.booking.dto.HoldRequest;
 import com.eventbooking.booking.dto.HoldResponse;
 import com.eventbooking.booking.entity.Booking;
+import com.eventbooking.booking.entity.BookingSeat;
 import com.eventbooking.booking.lock.SeatLockService;
 import com.eventbooking.booking.repository.BookingRepository;
 import com.eventbooking.catalog.category.Category;
@@ -24,8 +27,11 @@ import com.eventbooking.user.entity.User;
 import com.eventbooking.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,9 +46,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import com.eventbooking.booking.entity.BookingSeat;
-import com.eventbooking.payment.repository.PaymentRepository;
-import com.eventbooking.payment.service.PaymentService;
+import static org.springframework.data.domain.Sort.Direction.DESC;
+import static org.springframework.data.domain.Sort.by;
 /**
  * Integration tests for BookingService holdSeats flow.
  * Tests the full flow: validation → Redis locks → DB persistence → compensation.
@@ -327,11 +332,28 @@ private PaymentRepository paymentRepository;
         bookingService.holdSeats(request2, testUser.getId());
 
         // When
-        List<Booking> bookings = bookingService.getBookingsForUser(testUser.getId());
+        Pageable pageable = PageRequest.of(0, 10, by(DESC, "createdAt"));
+        Page<BookingSummaryDto> bookingPage = bookingService.getBookingsForUser(testUser.getId(), pageable);
 
         // Then
-        assertThat(bookings).hasSize(2);
-        assertThat(bookings).allMatch(b -> b.getUser().getId().equals(testUser.getId()));
+        assertThat(bookingPage.getContent()).hasSize(2);
+        assertThat(bookingPage.getContent()).allMatch(b -> b.status().equals("PENDING"));
+    }
+
+    @Test
+    void getBookingDetails_Success() {
+        // Given
+        HoldRequest request = new HoldRequest(testShow.getId(), List.of(seat1.getId()));
+        HoldResponse holdResponse = bookingService.holdSeats(request, testUser.getId());
+
+        // When
+        BookingDetailDto detail = bookingService.getBookingDetails(holdResponse.getBookingId(), testUser.getId());
+
+        // Then
+        assertThat(detail.id()).isEqualTo(holdResponse.getBookingId());
+        assertThat(detail.status()).isEqualTo("PENDING");
+        assertThat(detail.seats()).hasSize(1);
+        assertThat(detail.seats().get(0).getSeatId()).isEqualTo(seat1.getId());
     }
 
     private void clearAllLocks() {

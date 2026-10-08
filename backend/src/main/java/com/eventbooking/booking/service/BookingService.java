@@ -1,5 +1,7 @@
 package com.eventbooking.booking.service;
 
+import com.eventbooking.booking.dto.BookingDetailDto;
+import com.eventbooking.booking.dto.BookingSummaryDto;
 import com.eventbooking.booking.dto.HoldRequest;
 import com.eventbooking.booking.dto.HoldResponse;
 import com.eventbooking.booking.entity.Booking;
@@ -23,6 +25,8 @@ import com.eventbooking.user.entity.User;
 import com.eventbooking.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -163,11 +167,57 @@ public class BookingService {
     }
 
     /**
+     * Get booking details for a booking.
+     */
+    @Transactional(readOnly = true)
+    public BookingDetailDto getBookingDetails(UUID bookingId, Long userId) {
+        Booking booking = getBookingById(bookingId);
+
+        // Verify ownership
+        if (!booking.getUser().getId().equals(userId)) {
+            throw new UnauthorizedActionException("You can only view your own bookings");
+        }
+
+        String paymentStatus = paymentRepository.findByBookingId(bookingId)
+                .map(Payment::getStatus)
+                .orElse("NONE");
+
+        List<com.eventbooking.booking.dto.BookingSeatDto> seatDtos = booking.getBookingSeats().stream()
+                .map(bs -> new com.eventbooking.booking.dto.BookingSeatDto(
+                        bs.getSeat().getId(),
+                        bs.getSeat().getSection(),
+                        bs.getSeat().getRowLabel(),
+                        bs.getSeat().getSeatNumber(),
+                        bs.getPriceAtBooking(),
+                        bs.getActive()
+                ))
+                .toList();
+
+        return new BookingDetailDto(
+                booking.getId(),
+                booking.getShow().getEvent().getTitle(),
+                booking.getStatus(),
+                booking.getTotalAmount(),
+                booking.getCreatedAt(),
+                booking.getExpiresAt(),
+                paymentStatus,
+                seatDtos
+        );
+    }
+
+    /**
      * Get all bookings for a user.
      */
     @Transactional(readOnly = true)
-    public List<Booking> getBookingsForUser(Long userId) {
-        return bookingRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    public Page<BookingSummaryDto> getBookingsForUser(Long userId, Pageable pageable) {
+        return bookingRepository.findByUserId(userId, pageable)
+                .map(b -> new BookingSummaryDto(
+                        b.getId(),
+                        b.getShow().getEvent().getTitle(),
+                        b.getStatus(),
+                        b.getTotalAmount(),
+                        b.getCreatedAt()
+                ));
     }
 
     /**

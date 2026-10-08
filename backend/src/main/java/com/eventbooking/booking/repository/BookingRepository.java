@@ -1,6 +1,8 @@
 package com.eventbooking.booking.repository;
 
 import com.eventbooking.booking.entity.Booking;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +19,11 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      * Find all bookings for a user, ordered by creation date descending.
      */
     List<Booking> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    /**
+     * Find all bookings for a user with pagination.
+     */
+    Page<Booking> findByUserId(Long userId, Pageable pageable);
 
     /**
      * Find all PENDING bookings that have expired (for the sweeper).

@@ -1,10 +1,16 @@
 package com.eventbooking.booking.controller;
 
+import com.eventbooking.booking.dto.BookingDetailDto;
+import com.eventbooking.booking.dto.BookingSummaryDto;
 import com.eventbooking.booking.dto.HoldRequest;
 import com.eventbooking.booking.dto.HoldResponse;
 import com.eventbooking.booking.service.BookingService;
 import com.eventbooking.user.entity.User;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -75,5 +81,55 @@ public class BookingController {
 
         bookingService.confirmBooking(java.util.UUID.fromString(bookingId), user.getId());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Get booking details.
+     * GET /api/bookings/{id}
+     * Requires authentication and ownership.
+     *
+     * @param bookingId Booking UUID
+     * @param user      Current authenticated user
+     * @return Booking details
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<BookingDetailDto> getBookingDetails(
+            @PathVariable("id") String bookingId,
+            @AuthenticationPrincipal User user) {
+
+        BookingDetailDto booking = bookingService.getBookingDetails(
+                java.util.UUID.fromString(bookingId),
+                user.getId());
+        return ResponseEntity.ok(booking);
+    }
+
+    /**
+     * List user's bookings.
+     * GET /api/bookings/me
+     * Requires authentication.
+     *
+     * @param user      Current authenticated user
+     * @param page      Page number (0-indexed)
+     * @param size      Page size
+     * @param sort      Sort field and direction (e.g., "createdAt,desc")
+     * @return Paginated list of bookings
+     */
+    @GetMapping("/me")
+    public ResponseEntity<Page<BookingSummaryDto>> listUserBookings(
+            @AuthenticationPrincipal User user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt,desc") String[] sort) {
+
+        // Parse sort parameter
+        Sort.Direction direction = sort.length > 1 && sort[1].equalsIgnoreCase("asc")
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
+        String sortField = sort[0];
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortField));
+        Page<BookingSummaryDto> bookings = bookingService.getBookingsForUser(user.getId(), pageable);
+
+        return ResponseEntity.ok(bookings);
     }
 }
