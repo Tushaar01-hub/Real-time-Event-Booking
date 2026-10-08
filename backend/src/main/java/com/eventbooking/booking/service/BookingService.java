@@ -221,6 +221,51 @@ public class BookingService {
     }
 
     /**
+     * Get all bookings for admin with filtering.
+     */
+    @Transactional(readOnly = true)
+    public Page<BookingSummaryDto> getAllBookings(String status, Long showId, Pageable pageable) {
+        return bookingRepository.findAllAdmin(status, showId, pageable)
+                .map(b -> new BookingSummaryDto(
+                        b.getId(),
+                        b.getShow().getEvent().getTitle(),
+                        b.getStatus(),
+                        b.getTotalAmount(),
+                        b.getCreatedAt()
+                ));
+    }
+    @Transactional(readOnly = true)
+    public BookingDetailDto getAdminBookingDetails(UUID bookingId) {
+        Booking booking = getBookingById(bookingId);
+
+        String paymentStatus = paymentRepository.findByBookingId(bookingId)
+                .map(Payment::getStatus)
+                .orElse("NONE");
+
+        List<com.eventbooking.booking.dto.BookingSeatDto> seatDtos = booking.getBookingSeats().stream()
+                .map(bs -> new com.eventbooking.booking.dto.BookingSeatDto(
+                        bs.getSeat().getId(),
+                        bs.getSeat().getSection(),
+                        bs.getSeat().getRowLabel(),
+                        bs.getSeat().getSeatNumber(),
+                        bs.getPriceAtBooking(),
+                        bs.getActive()
+                ))
+                .toList();
+
+        return new BookingDetailDto(
+                booking.getId(),
+                booking.getShow().getEvent().getTitle(),
+                booking.getStatus(),
+                booking.getTotalAmount(),
+                booking.getCreatedAt(),
+                booking.getExpiresAt(),
+                paymentStatus,
+                seatDtos
+        );
+    }
+
+    /**
      * Cancel a booking.
      * Releases Redis locks if the booking is still PENDING.
      */

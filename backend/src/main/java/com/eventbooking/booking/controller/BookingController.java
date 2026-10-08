@@ -5,7 +5,7 @@ import com.eventbooking.booking.dto.BookingSummaryDto;
 import com.eventbooking.booking.dto.HoldRequest;
 import com.eventbooking.booking.dto.HoldResponse;
 import com.eventbooking.booking.service.BookingService;
-import com.eventbooking.user.entity.User;
+import com.eventbooking.common.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -43,9 +43,9 @@ public class BookingController {
     @PostMapping("/hold")
     public ResponseEntity<HoldResponse> holdSeats(
             @Valid @RequestBody HoldRequest request,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal AuthenticatedUser user) {
 
-        HoldResponse response = bookingService.holdSeats(request, user.getId());
+        HoldResponse response = bookingService.holdSeats(request, user.id());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -63,9 +63,9 @@ public class BookingController {
     @PostMapping("/{id}/cancel")
     public ResponseEntity<Void> cancelBooking(
             @PathVariable("id") String bookingId,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal AuthenticatedUser user) {
 
-        bookingService.cancelBooking(java.util.UUID.fromString(bookingId), user.getId());
+        bookingService.cancelBooking(java.util.UUID.fromString(bookingId), user.id());
         return ResponseEntity.noContent().build();
     }
 
@@ -77,9 +77,9 @@ public class BookingController {
     @PostMapping("/{id}/confirm")
     public ResponseEntity<Void> confirmBooking(
             @PathVariable("id") String bookingId,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal AuthenticatedUser user) {
 
-        bookingService.confirmBooking(java.util.UUID.fromString(bookingId), user.getId());
+        bookingService.confirmBooking(java.util.UUID.fromString(bookingId), user.id());
         return ResponseEntity.noContent().build();
     }
 
@@ -95,11 +95,11 @@ public class BookingController {
     @GetMapping("/{id}")
     public ResponseEntity<BookingDetailDto> getBookingDetails(
             @PathVariable("id") String bookingId,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal AuthenticatedUser user) {
 
         BookingDetailDto booking = bookingService.getBookingDetails(
                 java.util.UUID.fromString(bookingId),
-                user.getId());
+                user.id());
         return ResponseEntity.ok(booking);
     }
 
@@ -116,7 +116,7 @@ public class BookingController {
      */
     @GetMapping("/me")
     public ResponseEntity<Page<BookingSummaryDto>> listUserBookings(
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt,desc") String[] sort) {
@@ -128,7 +128,7 @@ public class BookingController {
         String sortField = sort[0];
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortField));
-        Page<BookingSummaryDto> bookings = bookingService.getBookingsForUser(user.getId(), pageable);
+        Page<BookingSummaryDto> bookings = bookingService.getBookingsForUser(user.id(), pageable);
 
         return ResponseEntity.ok(bookings);
     }

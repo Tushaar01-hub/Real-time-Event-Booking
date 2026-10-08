@@ -26,6 +26,12 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     Page<Booking> findByUserId(Long userId, Pageable pageable);
 
     /**
+     * Find all bookings with optional filtering for admins.
+     */
+    @Query("SELECT b FROM Booking b WHERE (:status IS NULL OR b.status = :status) AND (:showId IS NULL OR b.show.id = :showId)")
+    Page<Booking> findAllAdmin(@Param("status") String status, @Param("showId") Long showId, Pageable pageable);
+
+    /**
      * Find all PENDING bookings that have expired (for the sweeper).
      */
     @Query("SELECT b FROM Booking b WHERE b.status = 'PENDING' AND b.expiresAt < :now")
