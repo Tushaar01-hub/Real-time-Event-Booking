@@ -42,6 +42,7 @@ public class SecurityConfig {
                         // public catalog reads; writes require auth and an ADMIN role check on the method
                         .requestMatchers(HttpMethod.GET, "/api/categories/**", "/api/events/**", "/api/shows/**")
                         .permitAll()
+                        .requestMatchers("/api/recommendations", "/api/recommendations/popular", "/api/recommendations/upcoming").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
         return http.build();

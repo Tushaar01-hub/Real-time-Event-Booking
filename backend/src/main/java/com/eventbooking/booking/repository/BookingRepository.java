@@ -41,4 +41,22 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      * Find all bookings for a specific show.
      */
     List<Booking> findByShowId(Long showId);
+
+    /**
+     * Check if a show has confirmed bookings.
+     */
+    @Query("SELECT COUNT(b) > 0 FROM Booking b WHERE b.show.id = :showId AND b.status = 'CONFIRMED'")
+    boolean hasConfirmedBookings(@Param("showId") Long showId);
+
+    /**
+     * Find categories the user has booked confirmed events in.
+     */
+    @Query("SELECT DISTINCT b.show.event.category.id FROM Booking b WHERE b.user.id = :userId AND b.status = 'CONFIRMED'")
+    List<Long> findBookedCategoryIdsByUserId(@Param("userId") Long userId);
+
+    /**
+     * Find locations the user has booked confirmed events in.
+     */
+    @Query("SELECT DISTINCT b.show.event.location FROM Booking b WHERE b.user.id = :userId AND b.status = 'CONFIRMED'")
+    List<String> findBookedLocationsByUserId(@Param("userId") Long userId);
 }
