@@ -7,6 +7,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 /**
  * REST controller for Category operations.
@@ -54,6 +55,7 @@ public class CategoryController {
      */
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<CategoryDto> createCategory(@Valid @RequestBody CategoryDto dto) {
         CategoryDto created = categoryService.createCategory(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -64,6 +66,7 @@ public class CategoryController {
      */
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<CategoryDto> updateCategory(
             @PathVariable Long id,
             @Valid @RequestBody CategoryDto dto) {
@@ -77,6 +80,7 @@ public class CategoryController {
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<Void> deleteCategory(@PathVariable Long id) {
         categoryService.deleteCategory(id);
         return ResponseEntity.noContent().build();

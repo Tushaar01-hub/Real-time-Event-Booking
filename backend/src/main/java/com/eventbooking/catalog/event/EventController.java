@@ -1,5 +1,6 @@
 package com.eventbooking.catalog.event;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -69,6 +70,7 @@ public class EventController {
      */
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<EventDto> createEvent(@Valid @RequestBody EventDto dto) {
         EventDto created = eventService.createEvent(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -79,6 +81,7 @@ public class EventController {
      */
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<EventDto> updateEvent(
             @PathVariable Long id,
             @Valid @RequestBody EventDto dto) {
@@ -92,6 +95,7 @@ public class EventController {
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<Void> deleteEvent(@PathVariable Long id) {
         eventService.deleteEvent(id);
         return ResponseEntity.noContent().build();

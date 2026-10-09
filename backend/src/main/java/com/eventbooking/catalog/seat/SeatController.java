@@ -1,5 +1,6 @@
 package com.eventbooking.catalog.seat;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.constraints.DecimalMin;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -52,6 +53,7 @@ public class SeatController {
      */
     @PatchMapping("/shows/{showId}/seats/{seatId}")
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<SeatDto> updateSeatStatus(
             @PathVariable Long showId,
             @PathVariable Long seatId,

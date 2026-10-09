@@ -1,5 +1,6 @@
 package com.eventbooking.catalog.show;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -45,6 +46,7 @@ public class ShowController {
      */
     @PostMapping("/events/{eventId}/shows")
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<ShowDto> createShow(
             @PathVariable Long eventId,
             @Valid @RequestBody CreateShowRequest request) {
@@ -62,6 +64,7 @@ public class ShowController {
      */
     @PutMapping("/shows/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<ShowDto> updateShow(
             @PathVariable Long id,
             @Valid @RequestBody ShowDto dto) {
@@ -75,6 +78,7 @@ public class ShowController {
      */
     @DeleteMapping("/shows/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<Void> deleteShow(@PathVariable Long id) {
         showService.deleteShow(id);
         return ResponseEntity.noContent().build();
