@@ -2,6 +2,7 @@ package com.eventbooking.booking.dto;
 
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
@@ -12,10 +13,12 @@ import java.util.List;
 public class HoldRequest {
 
     @NotNull(message = "Show ID is required")
+    @Positive(message = "Show ID must be a positive number")
     private Long showId;
 
     @NotEmpty(message = "At least one seat must be selected")
     @Size(max = 6, message = "Cannot hold more than 6 seats at once")
+    @Positive(message = "Seat IDs must be positive numbers")
     private List<Long> seatIds;
 
     // ---------------------------------------------------------------- constructors
